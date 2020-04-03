@@ -1,0 +1,124 @@
+version: '3.5'
+services:
+  #gunicorn -w 4 api.wsgi -b 0.0.0.0:8000
+  app:
+    #API de entrada
+    build: .
+    image: middleware/api
+    restart: "no"
+    container_name: middleware_api
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    env_file: &envfile
+      - env.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:5
+    container_name: middleware_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: dbg4r4nt1z4r
+      MYSQL_DATABASE: garantizar
+      MYSQL_USER: garantizar
+      MYSQL_PASSWORD: dbg4r4nt1z4r
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+
+  fogarmock:
+    #Mock de endpoint a FOGAR (procesa operaciones atómicas), asociado a BUFFER DE ENTRADA
+    build: .
+    image: middleware/fogarmock
+    restart: "no"
+    container_name: fogar_mock
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    env_file: *envfile
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./fogar_mock:/app
+
+  garantizarmock:
+    #Mock de endpoint a Garantizar (recibe la respuesta fogar_mock), asociado a BUFFER DE SALIDA
+    build: .
+    image: middleware/garantizarmock
+    restart: "no"
+    container_name: garantizar_mock
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    env_file: *envfile
+    ports:
+      - "8090:8000"
+    volumes:
+      - ./garantizar_mock:/app        
+
+  workerentrada:
+    #Instancia de worker para buffer_entrada
+    build: .
+    image: middleware/worker_entrada
+    restart: "no"
+    container_name: worker_entrada
+    env_file: *envfile
+    command: ["celery", 
+              "worker",
+              "--app=worker.worker.app",
+              "--concurrency=1",
+              "--hostname=worker@buffer_entrada", 
+              "--loglevel=INFO",
+              "--queues=buffer_entrada"]
+    volumes:
+      - ./app:/app
+    depends_on:
+      - broker
+      - mysql
+
+  workersalida:
+    #Instancia de worker para buffer_salida
+    build: .
+    image: middleware/worker_salida
+    restart: "no"
+    container_name: worker_salida
+    env_file: *envfile
+    command: ["celery", 
+              "worker",
+              "--app=worker.worker.app",
+              "--concurrency=1",
+              "--hostname=worker@buffer_salida", 
+              "--loglevel=INFO",
+              "--queues=buffer_salida"]
+    volumes:
+      - ./app:/app
+    depends_on:
+      - broker
+      - mysql
+        
+  flower:
+    #Celery dashboard
+    image: zoomeranalytics/flower:0.9.1-4.0.2
+    container_name: flower
+    restart: "no"
+    env_file: *envfile
+    ports:
+      - "5555:5555"
+    depends_on:
+      - broker
+    
+  broker:
+    #Instancia de RabbitMQ
+    image: rabbitmq:3
+    container_name: rabbit_broker
+    volumes:
+      - rabbit_data:/var/lib/rabbitmq/mnesia
+    env_file: *envfile
+    #TODO: para acceder a mas opciones en flower, se requiere activar: rabbitmq-plugins enable rabbitmq_management
+    #command: ["rabbitmq-plugins enable rabbitmq_management"] -> no funciona desde acá
+    ports:
+      - 5672:5672
+      - 15672:15672 
+volumes:
+  rabbit_data:
+  mysql_data:

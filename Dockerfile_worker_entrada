@@ -1,0 +1,21 @@
+FROM python:3.6
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+ENV RABBITMQ_DEFAULT_USER=user
+ENV RABBITMQ_DEFAULT_PASS=password
+ENV CELERY_BROKER=amqp://user:password@broker:5672
+ENV FLOWER_BROKER=amqp://user:password@broker:5672
+ENV RESULT_BACKEND=rpc://
+ENV CELERY_RESULT_BACKEND=django-db
+ENV URL_FOGAR_ALTA=http://fogarmock:8000/mock_alta_garantia
+ENV URL_FOGAR_ACTUALIZACION=http://fogarmock:8000/mock_actualizacion_garantia
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN rm requirements.txt
+
+EXPOSE 8000
+
+COPY /app .
+
+CMD celery worker --app=worker.worker.app --concurrency=1 --hostname=worker@buffer_entrada --loglevel=INFO --queues=buffer_entrada

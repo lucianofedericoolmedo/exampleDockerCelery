@@ -1,0 +1,13 @@
+FROM python:3.6
+ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN rm requirements.txt
+
+EXPOSE 8000
+
+COPY /fogar_mock .
+
+CMD python manage.py runserver 0.0.0.0:8000
